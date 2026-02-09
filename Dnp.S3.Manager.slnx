@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/solution files/">
+    <File Path="README.md" />
+  </Folder>
+  <Project Path="Dnp.Controls.Lib/Dnp.Controls.Lib.csproj" />
+  <Project Path="Dnp.S3.Manager.Client/Dnp.S3.Manager.Client.csproj" />
+  <Project Path="Dnp.S3.Manager.Lib.Tests/Dnp.S3.Manager.Lib.Tests.csproj" />
+  <Project Path="Dnp.S3.Manager.Lib/Dnp.S3.Manager.Lib.csproj" />
+  <Project Path="Dnp.S3.Manager.Tests/Dnp.S3.Manager.Tests.csproj" />
+  <Project Path="Dnp.S3.Manager.WinForms/Dnp.S3.Manager.WinForms.csproj" />
+</Solution>
