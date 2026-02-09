@@ -1,5 +1,7 @@
 # Dnp.S3.Manager
 
+[![CI](https://github.com/cccsdh/Dnp.S3.Manager/actions/workflows/ci.yml/badge.svg)](https://github.com/cccsdh/Dnp.S3.Manager/actions/workflows/ci.yml)
+
 A lightweight Windows Forms S3 manager for uploading, downloading, and managing objects in S3-compatible storage.
 
 This repository contains a desktop UI (`Dnp.S3.Manager.WinForms`), a small S3 client library (`Dnp.S3.Manager.Lib`), and unit tests. The application persists configuration, accounts, and logs in a single application SQLite database (`app.db`) and protects account secrets using DPAPI (Windows Data Protection API).
@@ -61,8 +63,8 @@ This repository contains a desktop UI (`Dnp.S3.Manager.WinForms`), a small S3 cl
 ## TODO (refactor)
 
 - TODO: DatagridView row hight so that the text is not cut off. Also, the logs are not showing up in the datagridview. Need to fix that.
-- TODO: Refactor Account Form — align controls, fonts, spacing and toolbar/buttons with Main form for consistent look and feel.
-- TODO: Refactor Settings Form — align layout and behavior with Main form; unify Save/Cancel placement and iconography, and standardize margins/paddings.
+- TODO: Refactor Account Form â€” align controls, fonts, spacing and toolbar/buttons with Main form for consistent look and feel.
+- TODO: Refactor Settings Form â€” align layout and behavior with Main form; unify Save/Cancel placement and iconography, and standardize margins/paddings.
 - TODO: Other ease of use updates, check tab order for the pages.
 - TODO: Add log filtering and searching capabilities.
 - TODO: Add support for multiple concurrent transfers with a transfer queue and configurable concurrency level.
