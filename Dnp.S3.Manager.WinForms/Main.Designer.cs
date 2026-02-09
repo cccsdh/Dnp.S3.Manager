@@ -51,9 +51,9 @@ namespace Dnp.S3.Manager.WinForms
             btn_up = new Button();
             btn_rename = new Button();
             btn_down = new Button();
-            dgv_transfer_status = new DataGridView();
             tc_main = new TabControl();
             tabPage1 = new TabPage();
+            dgv_transfer_status = new DataGridView();
             tabPage2 = new TabPage();
             dgv_logs = new DataGridView();
             menuStrip1.SuspendLayout();
@@ -74,9 +74,9 @@ namespace Dnp.S3.Manager.WinForms
             splitContainer4.Panel2.SuspendLayout();
             splitContainer4.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)dgv_bucket_contents).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)dgv_transfer_status).BeginInit();
             tc_main.SuspendLayout();
             tabPage1.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)dgv_transfer_status).BeginInit();
             tabPage2.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)dgv_logs).BeginInit();
             SuspendLayout();
@@ -211,6 +211,7 @@ namespace Dnp.S3.Manager.WinForms
             // dgv_bucket_contents
             // 
             dgv_bucket_contents.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+            dgv_bucket_contents.AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.AllCells;
             dgv_bucket_contents.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
             dgv_bucket_contents.Dock = DockStyle.Fill;
             dgv_bucket_contents.Location = new Point(0, 0);
@@ -262,16 +263,6 @@ namespace Dnp.S3.Manager.WinForms
             btn_down.TabIndex = 0;
             btn_down.UseVisualStyleBackColor = true;
             // 
-            // dgv_transfer_status
-            // 
-            dgv_transfer_status.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
-            dgv_transfer_status.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
-            dgv_transfer_status.Dock = DockStyle.Fill;
-            dgv_transfer_status.Location = new Point(3, 3);
-            dgv_transfer_status.Name = "dgv_transfer_status";
-            dgv_transfer_status.Size = new Size(929, 111);
-            dgv_transfer_status.TabIndex = 0;
-            // 
             // tc_main
             // 
             tc_main.Controls.Add(tabPage1);
@@ -293,6 +284,17 @@ namespace Dnp.S3.Manager.WinForms
             tabPage1.TabIndex = 0;
             tabPage1.Text = "Status";
             tabPage1.UseVisualStyleBackColor = true;
+            // 
+            // dgv_transfer_status
+            // 
+            dgv_transfer_status.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+            dgv_transfer_status.AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.AllCells;
+            dgv_transfer_status.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
+            dgv_transfer_status.Dock = DockStyle.Fill;
+            dgv_transfer_status.Location = new Point(3, 3);
+            dgv_transfer_status.Name = "dgv_transfer_status";
+            dgv_transfer_status.Size = new Size(929, 111);
+            dgv_transfer_status.TabIndex = 0;
             // 
             // tabPage2
             // 
@@ -345,9 +347,9 @@ namespace Dnp.S3.Manager.WinForms
             ((System.ComponentModel.ISupportInitialize)splitContainer4).EndInit();
             splitContainer4.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)dgv_bucket_contents).EndInit();
-            ((System.ComponentModel.ISupportInitialize)dgv_transfer_status).EndInit();
             tc_main.ResumeLayout(false);
             tabPage1.ResumeLayout(false);
+            ((System.ComponentModel.ISupportInitialize)dgv_transfer_status).EndInit();
             tabPage2.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)dgv_logs).EndInit();
             ResumeLayout(false);

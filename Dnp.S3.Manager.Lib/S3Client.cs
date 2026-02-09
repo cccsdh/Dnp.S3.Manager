@@ -157,32 +157,54 @@ namespace Dnp.S3.Manager.Lib
         public async Task<ListObjectsResult> ListObjectsAsync(string bucket, string prefix = null, int maxKeys = 1000)
         {
             Log($"Listing objects for bucket={bucket}, prefix={prefix}", verboseOnly: false);
-            var req = new ListObjectsV2Request
-            {
-                BucketName = bucket,
-                Prefix = prefix ?? string.Empty,
-                Delimiter = "/",
-                MaxKeys = maxKeys
-            };
 
             try
             {
-                var res = await _client.ListObjectsV2Async(req);
                 var result = new ListObjectsResult();
-                if (res.CommonPrefixes != null)
-                    result.Folders.AddRange(res.CommonPrefixes);
-                if (res.S3Objects != null)
+                var seenFolders = new HashSet<string>();
+                var seenFiles = new HashSet<string>();
+                string? continuationToken = null;
+                do
                 {
-                    foreach (var o in res.S3Objects.Where(o => !o.Key.EndsWith("/")))
+                    var req = new ListObjectsV2Request
                     {
-                        result.Files.Add(new FileEntry
+                        BucketName = bucket,
+                        Prefix = prefix ?? string.Empty,
+                        Delimiter = "/",
+                        MaxKeys = maxKeys,
+                        ContinuationToken = continuationToken
+                    };
+
+                    var res = await _client.ListObjectsV2Async(req);
+
+                    if (res.CommonPrefixes != null)
+                    {
+                        foreach (var p in res.CommonPrefixes)
                         {
-                            Key = o.Key,
-                            Size = o.Size,
-                            LastModified = o.LastModified
-                        });
+                            if (seenFolders.Add(p)) result.Folders.Add(p);
+                        }
                     }
-                }
+
+                    if (res.S3Objects != null)
+                    {
+                        foreach (var o in res.S3Objects.Where(o => !o.Key.EndsWith("/")))
+                        {
+                            if (!seenFiles.Contains(o.Key))
+                            {
+                                seenFiles.Add(o.Key);
+                                result.Files.Add(new FileEntry
+                                {
+                                    Key = o.Key,
+                                    Size = o.Size,
+                                    LastModified = o.LastModified
+                                });
+                            }
+                        }
+                    }
+
+                    continuationToken = res.IsTruncated == true ? res.NextContinuationToken : null;
+                } while (continuationToken != null);
+
                 Log($"Found {result.Folders.Count} folders and {result.Files.Count} files", verboseOnly: true);
                 return result;
             }

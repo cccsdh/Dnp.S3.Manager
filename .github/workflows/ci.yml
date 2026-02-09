@@ -24,9 +24,41 @@ jobs:
       run: dotnet restore
     - name: Build
       run: dotnet build --no-restore -c Release
-    - name: Run tests
-      run: dotnet test --no-build -c Release --verbosity normal
-    
+
+    - name: Run tests (produce TRX)
+      run: |
+        mkdir TestResults 2>$null
+        dotnet test --no-build -c Release --logger "trx;LogFileName=test_results.trx" --results-directory TestResults --verbosity minimal
+      shell: powershell
+      continue-on-error: true
+
+    - name: Upload test results artifact
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-results
+        path: TestResults/**/*.trx
+
+    - name: Publish test results to GitHub Checks
+      if: always()
+      uses: dorny/test-reporter@v1
+      with:
+        name: Unit Tests
+        path: TestResults/**/*.trx
+        reporter: vstest
+        fail-on-error: false
+
+    - name: Fail job if tests failed
+      if: always()
+      run: |
+        $failed = 0
+        Get-ChildItem -Path TestResults -Filter *.trx -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
+          $content = Get-Content $_.FullName -Raw
+          if ($content -match '<Result>Failed</Result>' -or $content -match 'failed="[1-9]') { $failed++ }
+        }
+        if ($failed -gt 0) { Write-Host "Found failed tests in $failed TRX file(s)."; exit 1 }
+      shell: powershell
+
     - name: Publish WinForms app (single-file)
       run: |
         dotnet publish Dnp.S3.Manager.WinForms/Dnp.S3.Manager.WinForms.csproj -c Release -r win-x64 -o ./artifacts/winforms/publish --self-contained true /p:PublishSingleFile=true /p:IncludeAllContentForSelfExtract=true /p:PublishTrimmed=false

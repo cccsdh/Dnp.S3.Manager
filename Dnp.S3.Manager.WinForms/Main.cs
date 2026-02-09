@@ -33,11 +33,15 @@ namespace Dnp.S3.Manager.WinForms
         private bool _inEnsureGridFill = false;
         // suppress handler when programmatically changing selection/content
         private bool _suppressContentSelection = false;
+        // suppress EnsureGridFill when performing bulk programmatic updates to a grid
+        private bool _suppressEnsureGridFill = false;
 
         private readonly Dnp.S3.Manager.WinForms.Services.AccountManager _accounts;
         private readonly Microsoft.Extensions.Logging.ILogger<Main> _logger;
         private readonly Dnp.S3.Manager.WinForms.Services.LogRepository _logRepo;
         private readonly ToolTip _toolTip = new ToolTip();
+
+        private string _currentPath = string.Empty;
 
         public Main(Dnp.S3.Manager.Lib.S3Client s3Client, Dnp.S3.Manager.WinForms.Services.AccountManager accountManager, Microsoft.Extensions.Logging.ILogger<Main> logger, Dnp.S3.Manager.WinForms.Services.LogRepository logRepo)
         {
@@ -72,11 +76,43 @@ namespace Dnp.S3.Manager.WinForms
             dgv_bucket_contents.Columns.Add(new DataGridViewTextBoxColumn { Name = "IsFolder", Visible = false });
             dgv_bucket_contents.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Name", Name = "NameCol", Width = 400 });
             dgv_bucket_contents.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Size", Name = "SizeCol", Width = 120 });
-            dgv_bucket_contents.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Modified", Name = "DateCol", Width = 200 });
+            var dateCol = new DataGridViewTextBoxColumn { HeaderText = "Modified", Name = "DateCol", Width = 200, ValueType = typeof(DateTime), SortMode = DataGridViewColumnSortMode.Automatic };
+            dateCol.DefaultCellStyle.Format = "g"; // general date/time
+            dgv_bucket_contents.Columns.Add(dateCol);
             dgv_bucket_contents.CellDoubleClick += async (s, e) => await OnObjectDoubleClickedAsync(e.RowIndex);
-            // single-selection of a folder should drill into it immediately on row enter
-            dgv_bucket_contents.RowEnter += async (s, e) =>
+            // clicking a column header to sort should not trigger row selection-driven navigation
+            dgv_bucket_contents.ColumnHeaderMouseClick += (s, e) =>
             {
+                // suppress RowEnter processing while the grid performs its sort/selection changes
+                _suppressContentSelection = true;
+                // after the sort/selection changes complete on the UI thread, clear selection and reset suppression
+                BeginInvoke(new Action(() =>
+                {
+                    try { dgv_bucket_contents.ClearSelection(); dgv_bucket_contents.CurrentCell = null; } catch { }
+                    _suppressContentSelection = false;
+                }));
+            };
+            // MouseDown occurs before selection changes; detect header clicks here to prevent RowEnter firing
+            dgv_bucket_contents.MouseDown += (s, me) =>
+            {
+                if (me is MouseEventArgs mouseArgs)
+                {
+                    var ht = dgv_bucket_contents.HitTest(mouseArgs.X, mouseArgs.Y);
+                    if (ht.Type == DataGridViewHitTestType.ColumnHeader)
+                    {
+                        _suppressContentSelection = true;
+                        // clear selection after the UI processed the click and sorting
+                        BeginInvoke(new Action(() =>
+                        {
+                            try { dgv_bucket_contents.ClearSelection(); dgv_bucket_contents.CurrentCell = null; } catch { }
+                            _suppressContentSelection = false;
+                        }));
+                    }
+                }
+            };
+             // single-selection of a folder should drill into it immediately on row enter
+             dgv_bucket_contents.RowEnter += async (s, e) =>
+             {
                 try
                 {
                     if (_suppressContentSelection) return;
@@ -138,7 +174,7 @@ namespace Dnp.S3.Manager.WinForms
                 var fileBmp = TryGetResourceBitmap("file") ?? TryGetResourceBitmap("File");
                 if (fileBmp != null) il.Images.Add("file", fileBmp);
                 var folderBmp = TryGetResourceBitmap("folder") ?? TryGetResourceBitmap("Folder");
-                if (folderBmp != null) il.Images.Add("folder", folderBmp);
+                if (folderBmp != null) il.Images.Add("folder", bmp);
                 tv_buckets.ImageList = il;
             }
             catch (Exception ex) { _logger.LogError("Error loading resource bitmaps: {Error}", ex.Message); }
@@ -192,8 +228,10 @@ namespace Dnp.S3.Manager.WinForms
                 {
                     if (tc_main.SelectedIndex == 1) RefreshLogs();
                 };
-            }
-            catch { }
+                // populate logs initially in case Logs tab is visible at startup
+                RefreshLogs();
+             }
+             catch { }
         }
 
         /// <summary>
@@ -204,6 +242,7 @@ namespace Dnp.S3.Manager.WinForms
         /// </summary>
         private void EnsureGridFill(DataGridView dgv)
         {
+            if (_suppressEnsureGridFill) return;
             if (_inEnsureGridFill) return;
             try
             {
@@ -362,40 +401,47 @@ namespace Dnp.S3.Manager.WinForms
             var res = await s3.ListObjectsAsync(bucket, prefix);
             // suppress selection-driven navigation while we update the grid
             _suppressContentSelection = true;
-            dgv_bucket_contents.Rows.Clear();
-            var fileBmp = TryGetResourceBitmap("file") ?? TryGetResourceBitmap("File");
-            var folderBmp = TryGetResourceBitmap("folder") ?? TryGetResourceBitmap("Folder");
-
-            // folders
-            foreach (var p in res.Folders)
-            {
-                var display = string.IsNullOrEmpty(prefix) ? p.TrimEnd('/') : (p.StartsWith(prefix) ? p.Substring(prefix.Length).TrimEnd('/') : p.TrimEnd('/'));
-                Image icon = folderBmp ?? new Bitmap(1, 1);
-                var fullKey = p; // prefix returned is full prefix
-                dgv_bucket_contents.Rows.Add(icon, fullKey, "1", display, "", "");
-            }
-
-            // files
-            foreach (var f in res.Files)
-            {
-                var display = string.IsNullOrEmpty(prefix) ? f.Key : (f.Key.StartsWith(prefix) ? f.Key.Substring(prefix.Length) : f.Key);
-                Image icon = fileBmp ?? new Bitmap(1, 1);
-                dgv_bucket_contents.Rows.Add(icon, f.Key, "0", display, f.Size.HasValue ? FormatSize(f.Size.Value) : "", f.LastModified?.ToString() ?? "");
-            }
-
-            // update current path and label
-            _currentPath = prefix ?? string.Empty;
-            UpdatePathLabel();
-            AdjustGridRowHeights(dgv_bucket_contents);
-            // leave rows unselected and clear current cell so RowEnter/Selection events are not fired
+            _suppressEnsureGridFill = true;
             try
             {
-                dgv_bucket_contents.ClearSelection();
-                dgv_bucket_contents.CurrentCell = null;
+                dgv_bucket_contents.Rows.Clear();
+                var fileBmp = TryGetResourceBitmap("file") ?? TryGetResourceBitmap("File");
+                var folderBmp = TryGetResourceBitmap("folder") ?? TryGetResourceBitmap("Folder");
+
+                // folders
+                foreach (var p in res.Folders)
+                {
+                    var display = string.IsNullOrEmpty(prefix) ? p.TrimEnd('/') : (p.StartsWith(prefix) ? p.Substring(prefix.Length).TrimEnd('/') : p.TrimEnd('/'));
+                    Image icon = folderBmp ?? new Bitmap(1, 1);
+                    var fullKey = p; // prefix returned is full prefix
+                    // pass null for Modified for folders so column remains empty but typed as DateTime
+                    dgv_bucket_contents.Rows.Add(icon, fullKey, "1", display, "", null);
+                }
+
+                // files
+                foreach (var f in res.Files)
+                {
+                    var display = string.IsNullOrEmpty(prefix) ? f.Key : (f.Key.StartsWith(prefix) ? f.Key.Substring(prefix.Length) : f.Key);
+                    Image icon = fileBmp ?? new Bitmap(1, 1);
+                    object? modifiedVal = f.LastModified.HasValue ? (object)f.LastModified.Value : null;
+                    dgv_bucket_contents.Rows.Add(icon, f.Key, "0", display, f.Size.HasValue ? FormatSize(f.Size.Value) : "", modifiedVal);
+                }
+
+                // update current path and label
+                _currentPath = prefix ?? string.Empty;
+                UpdatePathLabel();
+                AdjustGridRowHeights(dgv_bucket_contents);
+                // leave rows unselected and clear current cell so RowEnter/Selection events are not fired
+                try
+                {
+                    dgv_bucket_contents.ClearSelection();
+                    dgv_bucket_contents.CurrentCell = null;
+                }
+                catch { }
             }
-            catch { }
             finally
             {
+                _suppressEnsureGridFill = false;
                 _suppressContentSelection = false;
             }
         }
@@ -597,7 +643,7 @@ namespace Dnp.S3.Manager.WinForms
                     item.Progress = 0;
                     item.State = "Queued";
                     _transfers.ResetItem(e.RowIndex);
-                    _ = StartTransferAsync(item);
+                    _= StartTransferAsync(item);
                 }
             }
         }
@@ -640,7 +686,8 @@ namespace Dnp.S3.Manager.WinForms
                     foreach (var f in allFiles)
                     {
                         var rel = Path.GetRelativePath(path, f).Replace(Path.DirectorySeparatorChar, '/');
-                        var key = string.IsNullOrEmpty(rel) ? Path.GetFileName(f) : (root + "/" + rel);
+                        var relativeKey = string.IsNullOrEmpty(rel) ? Path.GetFileName(f) : (root + "/" + rel);
+                        var key = BuildUploadKey(relativeKey);
                         var transfer = new TransferItem { FileName = Path.GetFileName(f), LocalPath = f, IsUpload = true, Bucket = _selectedBucket, Key = key, Progress = 0, State = "Queued" };
                         AddTransfer(transfer);
                         _ = StartTransferAsync(transfer);
@@ -648,7 +695,8 @@ namespace Dnp.S3.Manager.WinForms
                 }
                 else if (File.Exists(path))
                 {
-                    var key = Path.GetFileName(path);
+                    var relativeKey = Path.GetFileName(path);
+                    var key = BuildUploadKey(relativeKey);
                     var transfer = new TransferItem { FileName = Path.GetFileName(path), LocalPath = path, IsUpload = true, Bucket = _selectedBucket, Key = key, Progress = 0, State = "Queued" };
                     AddTransfer(transfer);
                     _ = StartTransferAsync(transfer);
@@ -656,157 +704,18 @@ namespace Dnp.S3.Manager.WinForms
             }
         }
 
-        private async Task StartTransferAsync(TransferItem transfer)
-        {
-            await _transferSemaphore.WaitAsync();
-            try
-            {
-                if (transfer.IsUpload)
-                {
-                    UpdateTransferState(transfer.Id, "Starting");
-                    transfer.Cancellation = new System.Threading.CancellationTokenSource();
-                    await using var fs = File.OpenRead(transfer.LocalPath);
-                    var progress = new Progress<double>(p => UpdateTransferProgress(transfer.Id, p));
-                    UpdateTransferState(transfer.Id, "Uploading");
-                    await s3!.PutObjectAsync(transfer.Bucket, transfer.Key, fs, progress: progress, cancellationToken: transfer.Cancellation.Token);
-                    UpdateTransferProgress(transfer.Id, 100);
-                    UpdateTransferState(transfer.Id, "Complete");
-                }
-                else
-                {
-                    UpdateTransferState(transfer.Id, "Starting");
-                    transfer.Cancellation = new System.Threading.CancellationTokenSource();
-                    var progress = new Progress<double>(p => UpdateTransferProgress(transfer.Id, p));
-                    UpdateTransferState(transfer.Id, "Downloading");
-                    await s3!.DownloadFileAsync(transfer.Bucket, transfer.Key, transfer.LocalPath, progress, transfer.Cancellation.Token);
-                    UpdateTransferProgress(transfer.Id, 100);
-                    UpdateTransferState(transfer.Id, "Complete");
-                }
-            }
-            catch (Exception ex)
-            {
-                UpdateTransferState(transfer.Id, ex is OperationCanceledException ? "Canceled" : "Failed: " + ex.Message);
-            }
-            finally
-            {
-                _transferSemaphore.Release();
-            }
-        }
-
-        private void UpdateSettingsConcurrency(int newLimit)
+        // Build the upload key by prefixing the currently selected path (if any).
+        private string BuildUploadKey(string key)
         {
             try
             {
-                _settings.MaxConcurrentTransfers = newLimit;
-                _settings.Save();
-                var old = _transferSemaphore;
-                _transferSemaphore = new System.Threading.SemaphoreSlim(newLimit);
-                old.Dispose();
+                var basePath = _currentPath ?? string.Empty;
+                if (string.IsNullOrEmpty(basePath)) return key;
+                var trimmed = basePath.Trim('/');
+                if (string.IsNullOrEmpty(trimmed)) return key;
+                return trimmed + "/" + key;
             }
-            catch { }
-        }
-
-        private async Task OnUploadMenuClicked()
-        {
-            if (s3 == null)
-            {
-                MessageBox.Show("S3 client not initialized. Select an account first.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                return;
-            }
-
-            if (string.IsNullOrEmpty(_selectedBucket))
-            {
-                MessageBox.Show("Select a bucket in the left pane before uploading.", "No bucket selected", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
-            }
-
-            using var ofd = new OpenFileDialog { Multiselect = true };
-            if (ofd.ShowDialog() != DialogResult.OK) return;
-
-            foreach (var file in ofd.FileNames)
-            {
-                var key = Path.GetFileName(file);
-                var transfer = new TransferItem { FileName = Path.GetFileName(file), Progress = 0, State = "Queued", Bucket = _selectedBucket, Key = key, LocalPath = file, IsUpload = true };
-                AddTransfer(transfer);
-
-                _ = Task.Run(async () =>
-                {
-                    await _transferSemaphore.WaitAsync();
-                    try
-                    {
-                        UpdateTransferState(transfer.Id, "Starting");
-                        transfer.Cancellation = new System.Threading.CancellationTokenSource();
-                        await using var fs = File.OpenRead(file);
-                        var progress = new Progress<double>(p => UpdateTransferProgress(transfer.Id, p));
-                        UpdateTransferState(transfer.Id, "Uploading");
-                        await s3!.PutObjectAsync(transfer.Bucket, transfer.Key, fs, progress: progress, cancellationToken: transfer.Cancellation.Token);
-                        UpdateTransferProgress(transfer.Id, 100);
-                        UpdateTransferState(transfer.Id, "Complete");
-                    }
-                    catch (Exception ex)
-                    {
-                        UpdateTransferState(transfer.Id, ex is OperationCanceledException ? "Canceled" : "Failed: " + ex.Message);
-                    }
-                    finally
-                    {
-                        _transferSemaphore.Release();
-                    }
-                });
-            }
-        }
-
-        private async Task OnDownloadButtonClicked()
-        {
-            // attempt to download selected item from bucket contents
-            if (_selectedBucket == null) return;
-            if (dgv_bucket_contents.SelectedRows.Count == 0) return;
-            var row = dgv_bucket_contents.SelectedRows[0];
-            var key = row.Cells[1].Value?.ToString() ?? string.Empty;
-            var save = new SaveFileDialog { FileName = Path.GetFileName(key) };
-            if (save.ShowDialog() == DialogResult.OK)
-            {
-                var dest = save.FileName;
-                var transfer = new TransferItem { FileName = Path.GetFileName(dest), Progress = 0, State = "Queued", Bucket = _selectedBucket, Key = key, LocalPath = dest };
-                AddTransfer(transfer);
-                _ = StartTransferAsync(transfer);
-            }
-        }
-
-        private async Task OnRenameClicked()
-        {
-            if (_selectedBucket == null) return;
-            if (dgv_bucket_contents.SelectedRows.Count == 0) return;
-            var row = dgv_bucket_contents.SelectedRows[0];
-            var key = row.Cells[1].Value?.ToString() ?? string.Empty;
-            var newName = Microsoft.VisualBasic.Interaction.InputBox("New name:", "Rename", Path.GetFileName(key));
-            if (string.IsNullOrEmpty(newName)) return;
-            var destKey = Path.Combine(Path.GetDirectoryName(key) ?? string.Empty, newName).Replace('\\', '/');
-            await s3!.RenameAsync(_selectedBucket, key, destKey);
-            await RefreshBucketsAsync();
-        }
-
-        private async Task OnDeleteClicked()
-        {
-            if (_selectedBucket == null) return;
-            if (dgv_bucket_contents.SelectedRows.Count == 0) return;
-            var row = dgv_bucket_contents.SelectedRows[0];
-            var key = row.Cells[1].Value?.ToString() ?? string.Empty;
-            var resp = MessageBox.Show($"Delete {key}?", "Confirm delete", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
-            if (resp != DialogResult.Yes) return;
-            await s3!.DeleteObjectsAsync(_selectedBucket, new List<string> { key });
-            await RefreshBucketsAsync();
-        }
-
-        private void ShowAccountsDialog()
-        {
-            // pass the injected AccountManager so the dialog mutates the same instance
-            var dlg = new AccountsForm(_accounts);
-            if (dlg.ShowDialog() == DialogResult.OK)
-            {
-                // do not replace the injected instance; save current state and reload
-                _accounts.Save();
-                LoadAccounts();
-            }
+            catch { return key; }
         }
 
         private static string FormatSize(long? size)
@@ -821,29 +730,6 @@ namespace Dnp.S3.Manager.WinForms
             s /= 1024;
             return s.ToString("F1") + " GB";
         }
-
-        private void AdjustGridRowHeights(DataGridView dgv)
-        {
-            try
-            {
-                if (dgv.RowCount == 0)
-                {
-                    return;
-                }
-                // Compute target height so rows fill the client area (integer division may leave small gap)
-                var clientHeight = dgv.ClientSize.Height - dgv.ColumnHeadersHeight;
-                if (clientHeight <= 0) return;
-                var rowCount = Math.Max(1, dgv.RowCount);
-                var h = Math.Max(16, clientHeight / rowCount);
-                foreach (DataGridViewRow r in dgv.Rows)
-                {
-                    r.Height = h;
-                }
-            }
-            catch { }
-        }
-
-        private string _currentPath = string.Empty;
 
         private void UpdatePathLabel()
         {
@@ -943,5 +829,313 @@ namespace Dnp.S3.Manager.WinForms
             UpdatePathLabel();
             if (!string.IsNullOrEmpty(_selectedBucket)) await ListObjectsForPrefix(_selectedBucket, _currentPath);
         }
+
+        // --- Added helpers and handlers to fix missing references and enable basic transfer behavior ---
+        private void ShowAccountsDialog()
+        {
+            try
+            {
+                var dlg = new AccountsForm(_accounts);
+                if (dlg.ShowDialog() == DialogResult.OK)
+                {
+                    // reload accounts and buckets after changes
+                    LoadAccounts();
+                }
+            }
+            catch { }
+        }
+
+        private void UpdateSettingsConcurrency(int maxConcurrent)
+        {
+            try
+            {
+                if (maxConcurrent <= 0) maxConcurrent = 1;
+                _transferSemaphore = new System.Threading.SemaphoreSlim(maxConcurrent);
+            }
+            catch { }
+        }
+
+        private void AdjustGridRowHeights(DataGridView dgv)
+        {
+            try
+            {
+                if (dgv == null) return;
+                if (dgv.InvokeRequired)
+                {
+                    dgv.BeginInvoke(new Action(() => AdjustGridRowHeights(dgv)));
+                    return;
+                }
+                // let DataGridView compute appropriate row heights for displayed cells
+                dgv.SuspendLayout();
+                try { dgv.AutoResizeRows(DataGridViewAutoSizeRowsMode.DisplayedCellsExceptHeaders); } catch { }
+                dgv.ResumeLayout();
+            }
+            catch { }
+        }
+
+        private async Task StartTransferAsync(TransferItem item)
+        {
+            if (item == null) return;
+            if (s3 == null)
+            {
+                UpdateTransferState(item.Id, "Failed: S3 not initialized");
+                return;
+            }
+
+            item.Cancellation = new System.Threading.CancellationTokenSource();
+            try
+            {
+                await _transferSemaphore.WaitAsync();
+                UpdateTransferState(item.Id, "Starting");
+
+                if (item.IsUpload)
+                {
+                    UpdateTransferState(item.Id, "Uploading");
+                    try
+                    {
+                        using var fs = File.OpenRead(item.LocalPath);
+                        var progress = new Progress<double>(p => UpdateTransferProgress(item.Id, p));
+                        await s3.PutObjectAsync(item.Bucket, item.Key, fs, "application/octet-stream", progress, item.Cancellation.Token);
+                        UpdateTransferState(item.Id, "Complete");
+                        _logger?.LogInformation("Upload complete: {Bucket}/{Key}", item.Bucket, item.Key);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        UpdateTransferState(item.Id, "Canceled");
+                        _logger?.LogInformation("Upload canceled: {Bucket}/{Key}", item.Bucket, item.Key);
+                    }
+                    catch (Exception ex)
+                    {
+                        UpdateTransferState(item.Id, "Failed: " + ex.Message);
+                        _logger?.LogError(ex, "Upload failed: {Bucket}/{Key}", item.Bucket, item.Key);
+                    }
+                }
+                else
+                {
+                    UpdateTransferState(item.Id, "Downloading");
+                    try
+                    {
+                        var progress = new Progress<double>(p => UpdateTransferProgress(item.Id, p));
+                        // ensure destination directory exists
+                        var dir = Path.GetDirectoryName(item.LocalPath);
+                        if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+                        await s3.DownloadFileAsync(item.Bucket, item.Key, item.LocalPath, progress, item.Cancellation.Token);
+                        UpdateTransferState(item.Id, "Complete");
+                        _logger?.LogInformation("Download complete: {Bucket}/{Key}", item.Bucket, item.Key);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        UpdateTransferState(item.Id, "Canceled");
+                        _logger?.LogInformation("Download canceled: {Bucket}/{Key}", item.Bucket, item.Key);
+                    }
+                    catch (Exception ex)
+                    {
+                        UpdateTransferState(item.Id, "Failed: " + ex.Message);
+                        _logger?.LogError(ex, "Download failed: {Bucket}/{Key}", item.Bucket, item.Key);
+                    }
+                }
+            }
+            finally
+            {
+                try { _transferSemaphore.Release(); } catch { }
+            }
+        }
+
+        // Reintroduce upload/download button handlers (were removed by earlier edits)
+        private async Task OnUploadMenuClicked()
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(_selectedBucket))
+                {
+                    MessageBox.Show("Please select a target bucket before uploading.", "No bucket selected", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                using var ofd = new OpenFileDialog { Multiselect = true };
+                if (ofd.ShowDialog() != DialogResult.OK) return;
+                foreach (var f in ofd.FileNames)
+                {
+                    var key = BuildUploadKey(Path.GetFileName(f));
+                    var transfer = new TransferItem { FileName = Path.GetFileName(f), LocalPath = f, IsUpload = true, Bucket = _selectedBucket, Key = key, Progress = 0, State = "Queued" };
+                    AddTransfer(transfer);
+                    _ = StartTransferAsync(transfer);
+                }
+            }
+            catch (Exception ex)
+            {
+                try { _logger?.LogError(ex, "OnUploadMenuClicked failed"); } catch { }
+            }
+        }
+
+        private async Task OnDownloadButtonClicked()
+        {
+            try
+            {
+                if (_selectedBucket == null) return;
+                if (dgv_bucket_contents.CurrentRow == null) return;
+                var row = dgv_bucket_contents.CurrentRow;
+                if (row.Tag != null && row.Tag.ToString() == "__placeholder__") return;
+                var fullKey = row.Cells["KeyFull"].Value?.ToString() ?? string.Empty;
+                var isFolder = (row.Cells["IsFolder"].Value?.ToString() ?? "0") == "1";
+                if (isFolder) return;
+
+                var save = new SaveFileDialog { FileName = Path.GetFileName(fullKey) };
+                if (save.ShowDialog() != DialogResult.OK) return;
+                var file = save.FileName;
+                var transfer = new TransferItem { FileName = Path.GetFileName(file), Progress = 0, State = "Queued", Bucket = _selectedBucket, Key = fullKey, LocalPath = file };
+                AddTransfer(transfer);
+                _ = StartTransferAsync(transfer);
+            }
+            catch (Exception ex)
+            {
+                try { _logger?.LogError(ex, "OnDownloadButtonClicked failed"); } catch { }
+            }
+        }
+
+        private async Task OnRenameClicked()
+        {
+            try
+            {
+                if (s3 == null)
+                {
+                    MessageBox.Show("S3 client not initialized.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
+
+                if (dgv_bucket_contents.CurrentRow == null)
+                {
+                    MessageBox.Show("Please select a single object to rename.", "No selection", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                var row = dgv_bucket_contents.CurrentRow;
+                if (row.Tag != null && row.Tag.ToString() == "__placeholder__") return;
+
+                var isFolder = (row.Cells["IsFolder"].Value?.ToString() ?? "0") == "1";
+                var fullKey = row.Cells["KeyFull"].Value?.ToString() ?? string.Empty;
+                if (string.IsNullOrEmpty(fullKey)) return;
+
+                if (isFolder)
+                {
+                    MessageBox.Show("Renaming folders is not supported.", "Not supported", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+
+                // simple input dialog for new name
+                string PromptForNewName(string currentName)
+                {
+                    using var f = new Form();
+                    f.StartPosition = FormStartPosition.CenterParent;
+                    f.FormBorderStyle = FormBorderStyle.FixedDialog;
+                    f.Width = 420; f.Height = 140; f.Text = "Rename Object";
+                    var tb = new TextBox { Left = 12, Top = 12, Width = 380, Text = currentName };
+                    var ok = new Button { Text = "OK", DialogResult = DialogResult.OK, Left = 224, Width = 75, Top = 48 };
+                    var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, Left = 305, Width = 75, Top = 48 };
+                    f.Controls.Add(tb); f.Controls.Add(ok); f.Controls.Add(cancel);
+                    f.AcceptButton = ok; f.CancelButton = cancel;
+                    return f.ShowDialog() == DialogResult.OK ? tb.Text.Trim() : string.Empty;
+                }
+
+                var currentName = Path.GetFileName(fullKey);
+                var newName = PromptForNewName(currentName);
+                if (string.IsNullOrEmpty(newName) || newName == currentName) return;
+
+                var idx = fullKey.LastIndexOf('/');
+                var destKey = idx >= 0 ? fullKey.Substring(0, idx + 1) + newName : newName;
+
+                var resp = MessageBox.Show($"Rename '{currentName}' => '{newName}'?", "Confirm rename", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+                if (resp != DialogResult.Yes) return;
+
+                try
+                {
+                    await s3.RenameAsync(_selectedBucket ?? string.Empty, fullKey, destKey);
+                    _logger?.LogInformation("Renamed {Bucket}/{Old} => {New}", _selectedBucket, fullKey, destKey);
+                    await ListObjectsForPrefix(_selectedBucket, _currentPath);
+                }
+                catch (Exception ex)
+                {
+                    _logger?.LogError(ex, "Rename failed for {Bucket}/{Key}", _selectedBucket, fullKey);
+                    MessageBox.Show($"Rename failed: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+            }
+            catch (Exception ex)
+            {
+                try { _logger?.LogError(ex, "OnRenameClicked unexpected error"); } catch { }
+            }
+        }
+
+        private async Task OnDeleteClicked()
+        {
+            try
+            {
+                if (s3 == null)
+                {
+                    MessageBox.Show("S3 client not initialized.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
+
+                var selectedRows = dgv_bucket_contents.SelectedRows;
+                if (selectedRows == null || selectedRows.Count == 0)
+                {
+                    MessageBox.Show("Please select one or more objects or folders to delete.", "No selection", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                var keysToDelete = new List<string>();
+                foreach (DataGridViewRow r in selectedRows)
+                {
+                    if (r == null) continue;
+                    if (r.Tag != null && r.Tag.ToString() == "__placeholder__") continue;
+                    var isFolder = (r.Cells["IsFolder"].Value?.ToString() ?? "0") == "1";
+                    var keyFull = r.Cells["KeyFull"].Value?.ToString() ?? string.Empty;
+                    if (string.IsNullOrEmpty(keyFull)) continue;
+
+                    if (!isFolder)
+                    {
+                        keysToDelete.Add(keyFull);
+                    }
+                    else
+                    {
+                        try
+                        {
+                            var list = await s3.ListObjectsAsync(_selectedBucket ?? string.Empty, keyFull);
+                            foreach (var fe in list.Files) keysToDelete.Add(fe.Key);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger?.LogError(ex, "Failed to enumerate folder for delete: {Bucket}/{Prefix}", _selectedBucket, keyFull);
+                        }
+                    }
+                }
+
+                if (keysToDelete.Count == 0)
+                {
+                    MessageBox.Show("No deletable objects were found in the selection.", "Nothing to delete", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+
+                var resp = MessageBox.Show($"Delete {keysToDelete.Count} objects from bucket '{_selectedBucket}'?", "Confirm delete", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+                if (resp != DialogResult.Yes) return;
+
+                try
+                {
+                    await s3.DeleteObjectsAsync(_selectedBucket ?? string.Empty, keysToDelete);
+                    _logger?.LogInformation("Deleted {Count} objects from {Bucket}", keysToDelete.Count, _selectedBucket);
+                    await ListObjectsForPrefix(_selectedBucket, _currentPath);
+                }
+                catch (Exception ex)
+                {
+                    _logger?.LogError(ex, "DeleteObjectsAsync failed for {Bucket}", _selectedBucket);
+                    MessageBox.Show($"Delete failed: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+            }
+            catch (Exception ex)
+            {
+                try { _logger?.LogError(ex, "OnDeleteClicked unexpected error"); } catch { }
+            }
+        }
+
+        // end of class
     }
 }
