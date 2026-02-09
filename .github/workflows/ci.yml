@@ -76,7 +76,7 @@ jobs:
       if: always()
       uses: actions/checkout@v4
       with:
-        repository: ${{ github.repository }}.wiki
+        repository: ${{ github.repository }}.Wiki
         token: ${{ secrets.GITHUB_TOKEN }}
         path: wiki
 
