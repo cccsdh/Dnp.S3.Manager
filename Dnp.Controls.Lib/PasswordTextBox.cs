@@ -29,7 +29,7 @@ namespace Dnp.Controls.Lib
             _textBox = new TextBox { BorderStyle = BorderStyle.FixedSingle, Dock = DockStyle.Fill }; 
             _toggle = new Button { Width = 30, Dock = DockStyle.Right, FlatStyle = FlatStyle.Flat };
             _toggle.FlatAppearance.BorderSize = 0;
-            _toggle.Text = "\u{1F441}"; // eye-like glyph fallback
+            _toggle.Text = "\u25CF"; // simple dot as fallback
             _toggle.Font = new Font("Segoe UI Symbol", 9F, FontStyle.Regular, GraphicsUnit.Point);
             _toggle.Click += Toggle_Click;
 
@@ -61,7 +61,7 @@ namespace Dnp.Controls.Lib
         private void UpdateToggleText()
         {
             // simple text toggle (could be replaced with an image)
-            _toggle.Text = _isPasswordShown ? "\u{1F441}" : "\u{1F441}";
+            _toggle.Text = _isPasswordShown ? "\u25CB" : "\u25CF";
         }
 
         [Category("Appearance")]
@@ -72,6 +72,8 @@ namespace Dnp.Controls.Lib
         }
 
         [Category("Behavior")]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        [Browsable(false)]
         public char PasswordChar
         {
             get => _textBox.PasswordChar;
@@ -79,6 +81,8 @@ namespace Dnp.Controls.Lib
         }
 
         [Category("Behavior")]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        [Browsable(false)]
         public bool UseSystemPasswordChar
         {
             get => _textBox.UseSystemPasswordChar;
