@@ -45,6 +45,8 @@ jobs:
       with:
         name: Unit Tests
         path: TestResults/**/*.trx
+        reporter: dotnet-trx
+        path-replace-backslashes: true
         fail-on-error: false
 
     - name: Fail job if tests failed
