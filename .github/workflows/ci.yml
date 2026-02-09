@@ -103,9 +103,26 @@ jobs:
         git config user.name "github-actions[bot]"
         git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
         git add TestResults.md
-        $commit = git commit -m "Update test results from run ${{ github.run_id }}" -q || echo "No changes to commit"
-        # try pushing to main first, fallback to master
-        git push origin HEAD:main -q || git push origin HEAD:master -q || echo "Failed to push wiki (insufficient permissions or no wiki branch)"
+        # attempt to commit; check exit code instead of using '||'
+        git commit -m "Update test results from run ${{ github.run_id }}" -q 2>$null
+        if ($LASTEXITCODE -eq 0) {
+          Write-Host "Committed wiki update."
+        } else {
+          Write-Host "No changes to commit."
+        }
+
+        # try pushing to main first, fallback to master; check exit codes
+        git push origin HEAD:main -q 2>$null
+        if ($LASTEXITCODE -ne 0) {
+          git push origin HEAD:master -q 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "Failed to push wiki (insufficient permissions or no wiki branch)"
+          } else {
+            Write-Host "Pushed wiki to master branch."
+          }
+        } else {
+          Write-Host "Pushed wiki to main branch."
+        }
         Pop-Location
       shell: powershell
 
