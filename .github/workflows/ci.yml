@@ -27,7 +27,7 @@ jobs:
 
     - name: Run tests (produce TRX)
       run: |
-        mkdir TestResults 2>$null
+        if (!(Test-Path -Path TestResults)) { mkdir TestResults }
         dotnet test --no-build -c Release --logger "trx;LogFileName=test_results.trx" --results-directory TestResults --verbosity minimal
       shell: powershell
       continue-on-error: true
@@ -42,7 +42,7 @@ jobs:
     - name: Generate test summary
       if: always()
       run: |
-        mkdir TestResults 2>$null
+        if (!(Test-Path -Path TestResults)) { mkdir TestResults }
         $summary = "## Test Results Summary`n`n"
         $failed = 0; $total = 0; $passed = 0; $skipped = 0
         Get-ChildItem -Path TestResults -Filter *.trx -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
