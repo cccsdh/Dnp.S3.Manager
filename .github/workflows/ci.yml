@@ -39,15 +39,38 @@ jobs:
         name: test-results
         path: TestResults/**/*.trx
 
-    - name: Publish test results
-      uses: dorny/test-reporter@v1
+    - name: Generate test summary
+      if: always()
+      run: |
+        mkdir TestResults 2>$null
+        $summary = "## Test Results Summary`n`n"
+        $failed = 0; $total = 0; $passed = 0; $skipped = 0
+        Get-ChildItem -Path TestResults -Filter *.trx -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
+          try {
+            $xml = [xml](Get-Content $_.FullName)
+            $results = $xml.TestRun.Results.UnitTestResult
+            if ($null -eq $results) { $count = 0 } elseif ($results -is [System.Array]) { $count = $results.Length } else { $count = 1 }
+            $total += $count
+            $f = ($results | Where-Object { $_.outcome -eq 'Failed' } | Measure-Object).Count
+            $p = ($results | Where-Object { $_.outcome -eq 'Passed' } | Measure-Object).Count
+            $s = ($results | Where-Object { $_.outcome -eq 'NotExecuted' -or $_.outcome -eq 'Skipped' } | Measure-Object).Count
+            $failed += $f; $passed += $p; $skipped += $s
+            $summary += "### File: $($_.FullName)`nTotal: $count, Passed: $p, Failed: $f, Skipped: $s`n`n"
+          }
+          catch {
+            $summary += "### File: $($_.FullName)`nFailed to parse TRX: $($_.Exception.Message)`n`n"
+          }
+        }
+        $summary += "`n**Overall:** Total=$total, Passed=$passed, Failed=$failed, Skipped=$skipped`n"
+        $summary | Out-File -FilePath TestResults/TestSummary.md -Encoding utf8
+      shell: powershell
+
+    - name: Upload test summary artifact
+      if: always()
+      uses: actions/upload-artifact@v4
       with:
-        name: Unit Tests
-        path: TestResults/**/*.trx
-        reporter: dotnet-trx
-        path-replace-backslashes: true
-        fail-on-empty: true
-        token: ${{ secrets.GITHUB_TOKEN }}
+        name: test-summary
+        path: TestResults/TestSummary.md
 
     - name: Fail job if tests failed
       if: always()
