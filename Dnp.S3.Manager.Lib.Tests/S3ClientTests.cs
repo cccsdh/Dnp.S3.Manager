@@ -15,11 +15,19 @@ namespace Dnp.S3.Manager.Lib.Tests
     [TestClass]
     public class S3ClientTests
     {
+        // progress helper that invokes callbacks synchronously to avoid
+        // SynchronizationContext-related posting that can make assertions racy
+        private class SynchronousProgress<T> : IProgress<T>
+        {
+            private readonly Action<T> _callback;
+            public SynchronousProgress(Action<T> callback) => _callback = callback;
+            public void Report(T value) => _callback(value);
+        }
         [TestMethod]
         public async Task ListBucketsAsync_Returns_Bucket_Names()
         {
             var mockS3 = new Mock<S3Client.IS3Api>();
-            var resp = new ListBucketsResponse();
+            var resp = new ListBucketsResponse { Buckets = new System.Collections.Generic.List<S3Bucket>() };
             resp.Buckets.Add(new S3Bucket { BucketName = "b1" });
             resp.Buckets.Add(new S3Bucket { BucketName = "b2" });
             mockS3.Setup(c => c.ListBucketsAsync(It.IsAny<CancellationToken>())).ReturnsAsync(resp);
@@ -35,7 +43,7 @@ namespace Dnp.S3.Manager.Lib.Tests
         public async Task ListObjectsAsync_Returns_Folders_And_Files()
         {
             var mockS3 = new Mock<S3Client.IS3Api>();
-            var resp = new ListObjectsV2Response();
+            var resp = new ListObjectsV2Response { CommonPrefixes = new System.Collections.Generic.List<string>(), S3Objects = new System.Collections.Generic.List<S3Object>() };
             resp.CommonPrefixes.Add("folder1/");
             resp.S3Objects.Add(new S3Object { Key = "file1.txt", Size = 123, LastModified = DateTime.UtcNow });
             mockS3.Setup(c => c.ListObjectsV2Async(It.IsAny<ListObjectsV2Request>(), It.IsAny<CancellationToken>())).ReturnsAsync(resp);
@@ -61,7 +69,7 @@ namespace Dnp.S3.Manager.Lib.Tests
             var client = new S3Client(mockS3.Object, mockTU.Object);
 
             double last = 0;
-            var progress = new Progress<double>(p => last = p);
+            var progress = new SynchronousProgress<double>(p => last = p);
             using var ms = new MemoryStream(new byte[10]);
             // disambiguate overload by providing contentType argument
             await client.PutObjectAsync("bucket", "key", ms, "application/octet-stream", progress);
@@ -103,7 +111,7 @@ namespace Dnp.S3.Manager.Lib.Tests
             try
             {
                 double last = 0;
-                var progress = new Progress<double>(p => last = p);
+                var progress = new SynchronousProgress<double>(p => last = p);
                 await client.DownloadFileAsync("b", "k", tmp, progress);
                 Assert.AreEqual(100.0, last, 0.001);
                 var read = File.ReadAllBytes(tmp);
@@ -142,7 +150,7 @@ namespace Dnp.S3.Manager.Lib.Tests
         public async Task DownloadFolderAsync_Downloads_Objects()
         {
             var mockS3 = new Mock<S3Client.IS3Api>();
-            var listResp = new ListObjectsV2Response();
+            var listResp = new ListObjectsV2Response { S3Objects = new System.Collections.Generic.List<S3Object>() };
             listResp.S3Objects.Add(new S3Object { Key = "p/file1.txt" });
             mockS3.Setup(c => c.ListObjectsV2Async(It.IsAny<ListObjectsV2Request>(), It.IsAny<CancellationToken>())).ReturnsAsync(listResp);
 

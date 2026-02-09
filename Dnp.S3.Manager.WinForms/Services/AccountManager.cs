@@ -40,6 +40,8 @@ namespace Dnp.S3.Manager.WinForms.Services
             {
                 throw new InvalidOperationException("AccountManager is not configured with a DbPath. File-based persistence has been removed.");
             }
+            // ensure DB schema exists before attempting to persist accounts
+            try { AccountsSqlStore.EnsureDefaultSettings(DbPath); } catch { }
             // persist each account into the DB (upsert)
             try
             {
