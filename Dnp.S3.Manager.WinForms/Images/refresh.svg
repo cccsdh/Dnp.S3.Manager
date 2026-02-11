@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <!-- Circular refresh arrow, Windows-blue color to match download icon -->
+  <defs>
+    <style> .stroke { stroke: #0078D7; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; fill: none; } </style>
+  </defs>
+  <!-- Arc -->
+  <path class="stroke" d="M12 32a20 20 0 1 0 8-15"/>
+  <!-- Arrow head -->
+  <path fill="#0078D7" d="M44 8 L50 18 L40 18 Z" transform="rotate(20 44 8)"/>
+</svg>

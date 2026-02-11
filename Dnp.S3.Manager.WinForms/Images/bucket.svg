@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <style>.s{fill:none;stroke:#0078D7;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}</style>
+  </defs>
+  <!-- bucket with handle -->
+  <path class="s" d="M10 28 L54 28 L46 54 L18 54 Z" />
+  <path class="s" d="M22 28 C22 18 42 18 42 28" />
+  <path class="s" d="M20 12 C24 8 40 8 44 12" />
+</svg>

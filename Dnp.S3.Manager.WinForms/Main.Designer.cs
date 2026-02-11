@@ -56,6 +56,7 @@ namespace Dnp.S3.Manager.WinForms
             dgv_transfer_status = new DataGridView();
             tabPage2 = new TabPage();
             dgv_logs = new DataGridView();
+            btn_refresh = new Button();
             menuStrip1.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)splitContainer1).BeginInit();
             splitContainer1.Panel1.SuspendLayout();
@@ -147,6 +148,7 @@ namespace Dnp.S3.Manager.WinForms
             // 
             // splitContainer2.Panel2
             // 
+            splitContainer2.Panel2.Controls.Add(btn_refresh);
             splitContainer2.Panel2.Controls.Add(btn_delete);
             splitContainer2.Panel2.Controls.Add(btn_up);
             splitContainer2.Panel2.Controls.Add(btn_rename);
@@ -222,9 +224,9 @@ namespace Dnp.S3.Manager.WinForms
             // btn_delete
             // 
             btn_delete.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            btn_delete.BackgroundImage = Properties.Resources.Delete;
+            btn_delete.BackgroundImage = Properties.Resources.Delete_32;
             btn_delete.BackgroundImageLayout = ImageLayout.Center;
-            btn_delete.Location = new Point(838, 3);
+            btn_delete.Location = new Point(836, 3);
             btn_delete.Name = "btn_delete";
             btn_delete.Size = new Size(75, 53);
             btn_delete.TabIndex = 3;
@@ -233,9 +235,9 @@ namespace Dnp.S3.Manager.WinForms
             // btn_up
             // 
             btn_up.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            btn_up.BackgroundImage = Properties.Resources.Upload;
+            btn_up.BackgroundImage = Properties.Resources.Upload_32;
             btn_up.BackgroundImageLayout = ImageLayout.Center;
-            btn_up.Location = new Point(598, 3);
+            btn_up.Location = new Point(608, 3);
             btn_up.Name = "btn_up";
             btn_up.Size = new Size(75, 53);
             btn_up.TabIndex = 2;
@@ -244,9 +246,9 @@ namespace Dnp.S3.Manager.WinForms
             // btn_rename
             // 
             btn_rename.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            btn_rename.BackgroundImage = Properties.Resources.Rename;
+            btn_rename.BackgroundImage = Properties.Resources.Rename_32;
             btn_rename.BackgroundImageLayout = ImageLayout.Center;
-            btn_rename.Location = new Point(718, 3);
+            btn_rename.Location = new Point(722, 3);
             btn_rename.Name = "btn_rename";
             btn_rename.Size = new Size(75, 53);
             btn_rename.TabIndex = 1;
@@ -255,9 +257,9 @@ namespace Dnp.S3.Manager.WinForms
             // btn_down
             // 
             btn_down.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            btn_down.BackgroundImage = Properties.Resources.Download;
+            btn_down.BackgroundImage = Properties.Resources.Download_32;
             btn_down.BackgroundImageLayout = ImageLayout.Center;
-            btn_down.Location = new Point(478, 3);
+            btn_down.Location = new Point(494, 3);
             btn_down.Name = "btn_down";
             btn_down.Size = new Size(75, 53);
             btn_down.TabIndex = 0;
@@ -316,6 +318,17 @@ namespace Dnp.S3.Manager.WinForms
             dgv_logs.Size = new Size(929, 111);
             dgv_logs.TabIndex = 0;
             // 
+            // btn_refresh
+            // 
+            btn_refresh.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            btn_refresh.BackgroundImage = Properties.Resources.refresh_32;
+            btn_refresh.BackgroundImageLayout = ImageLayout.Center;
+            btn_refresh.Location = new Point(380, 2);
+            btn_refresh.Name = "btn_refresh";
+            btn_refresh.Size = new Size(75, 53);
+            btn_refresh.TabIndex = 4;
+            btn_refresh.UseVisualStyleBackColor = true;
+            // 
             // Main
             // 
             AutoScaleDimensions = new SizeF(10F, 25F);
@@ -327,6 +340,7 @@ namespace Dnp.S3.Manager.WinForms
             MainMenuStrip = menuStrip1;
             Name = "Main";
             Text = "Main";
+            this.Load += new System.EventHandler(this.Main_Load);
             menuStrip1.ResumeLayout(false);
             menuStrip1.PerformLayout();
             splitContainer1.Panel1.ResumeLayout(false);
@@ -381,5 +395,6 @@ namespace Dnp.S3.Manager.WinForms
         private TabPage tabPage1;
         private TabPage tabPage2;
         private DataGridView dgv_logs;
+        private Button btn_refresh;
     }
 }

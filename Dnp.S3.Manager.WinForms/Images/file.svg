@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <style>.s{fill:none;stroke:#0078D7;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}</style>
+  </defs>
+  <path class="s" d="M16 8h24l8 8v36a2 2 0 0 1-2 2H16a2 2 0 0 1-2-2V10a2 2 0 0 1 2-2z"/>
+  <line class="s" x1="24" y1="28" x2="40" y2="28" />
+  <line class="s" x1="24" y1="34" x2="40" y2="34" />
+</svg>

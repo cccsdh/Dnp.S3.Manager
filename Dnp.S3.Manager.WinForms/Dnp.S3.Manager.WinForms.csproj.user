@@ -8,11 +8,19 @@
     <Compile Update="Main.cs">
       <SubType>Form</SubType>
     </Compile>
+    <Compile Update="Main.Extensions.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Update="NewAccountForm.cs">
       <SubType>Form</SubType>
     </Compile>
     <Compile Update="SettingsForm.cs">
       <SubType>Form</SubType>
     </Compile>
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Update="Properties\Resources.resx">
+      <SubType>Designer</SubType>
+    </EmbeddedResource>
   </ItemGroup>
 </Project>
