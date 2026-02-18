@@ -80,52 +80,6 @@ jobs:
         token: ${{ secrets.GITHUB_TOKEN }}
         path: wiki
 
-    - name: Publish test summary to Wiki
-      if: always()
-      run: |
-        if (!(Test-Path -Path wiki)) { Write-Host "Wiki repository not available; skipping wiki publish."; exit 0 }
-        if (!(Test-Path -Path TestResults/TestSummary.md)) { Write-Host "Test summary not found; skipping wiki publish."; exit 0 }
-
-        $content = Get-Content TestResults/TestSummary.md -Raw
-        # determine failed count heuristically
-        $failed = 0
-        if ($content -match 'Failed=(\d+)') { $failed = [int]$matches[1] }
-        elseif ($content -match 'Failed:\s*(\d+)') { $failed = [int]$matches[1] }
-
-        $status = if ($failed -gt 0) { "<span style='color:red'>FAILED</span>" } else { "<span style='color:green'>PASSED</span>" }
-        $now = (Get-Date).ToString("u")
-        $md = "# Current Tests`n`nLast updated: $now`n`nStatus: $status`n`n" + $content
-
-        $outPath = Join-Path -Path "wiki" -ChildPath "TestResults.md"
-        $md | Out-File -FilePath $outPath -Encoding utf8
-
-        Push-Location wiki
-        git config user.name "github-actions[bot]"
-        git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-        git add TestResults.md
-        # attempt to commit; check exit code instead of using '||'
-        git commit -m "Update test results from run ${{ github.run_id }}" -q 2>$null
-        if ($LASTEXITCODE -eq 0) {
-          Write-Host "Committed wiki update."
-        } else {
-          Write-Host "No changes to commit."
-        }
-
-        # try pushing to main first, fallback to master; check exit codes
-        git push origin HEAD:main -q 2>$null
-        if ($LASTEXITCODE -ne 0) {
-          git push origin HEAD:master -q 2>$null
-          if ($LASTEXITCODE -ne 0) {
-            Write-Host "Failed to push wiki (insufficient permissions or no wiki branch)"
-          } else {
-            Write-Host "Pushed wiki to master branch."
-          }
-        } else {
-          Write-Host "Pushed wiki to main branch."
-        }
-        Pop-Location
-      shell: powershell
-
     - name: Fail job if tests failed
       if: always()
       run: |
