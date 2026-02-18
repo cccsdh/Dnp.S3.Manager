@@ -34,4 +34,11 @@
     </EmbeddedResource>
   </ItemGroup>
 
+  <!-- Exclude Main.Extensions.resx from being embedded to avoid duplicate resource output names
+       (Main.resx and Main.Extensions.resx would both generate the same Main.resources). -->
+  <ItemGroup>
+    <EmbeddedResource Remove="Main.Extensions.resx" />
+    <None Include="Main.Extensions.resx" />
+  </ItemGroup>
+
 </Project>
