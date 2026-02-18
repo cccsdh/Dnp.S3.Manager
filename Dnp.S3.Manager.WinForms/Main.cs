@@ -43,6 +43,53 @@ namespace Dnp.S3.Manager.WinForms
 
         private string _currentPath = string.Empty;
 
+        // Centralized helper to populate the bucket contents grid from a sequence of items.
+        // Each item: (isFolder, fullKey, size, modified, display)
+        private void PopulateBucketGridFromItems(IEnumerable<(bool isFolder, string key, long? size, DateTime? modified, string display)> items, string? prefix)
+        {
+            if (InvokeRequired)
+            {
+                BeginInvoke(new Action(() => PopulateBucketGridFromItems(items, prefix)));
+                return;
+            }
+
+            var prevVirtual = _virtualModeEnabled;
+            try
+            {
+                try { SetVirtualModeEnabled(false); } catch { }
+
+                dgv_bucket_contents.Rows.Clear();
+
+                var fileBmp = TryGetResourceBitmap("file") ?? TryGetResourceBitmap("File");
+                var folderBmp = TryGetResourceBitmap("folder") ?? TryGetResourceBitmap("Folder");
+                var blank = new Bitmap(1, 1);
+
+                foreach (var it in items)
+                {
+                    if (it.isFolder)
+                    {
+                        Image icon = folderBmp ?? blank;
+                        dgv_bucket_contents.Rows.Add(icon, it.key, "1", it.display, "", null);
+                    }
+                    else
+                    {
+                        Image icon = fileBmp ?? blank;
+                        object? modifiedVal = it.modified.HasValue ? (object)it.modified.Value : null;
+                        dgv_bucket_contents.Rows.Add(icon, it.key, "0", it.display, it.size.HasValue ? FormatSize(it.size.Value) : "", modifiedVal);
+                    }
+                }
+
+                _currentPath = prefix ?? string.Empty;
+                UpdatePathLabel();
+                AdjustGridRowHeights(dgv_bucket_contents);
+                try { dgv_bucket_contents.ClearSelection(); dgv_bucket_contents.CurrentCell = null; } catch { }
+            }
+            finally
+            {
+                try { SetVirtualModeEnabled(prevVirtual); } catch { }
+            }
+        }
+
         public Main(Dnp.S3.Manager.Lib.S3Client s3Client, Dnp.S3.Manager.WinForms.Services.AccountManager accountManager, Microsoft.Extensions.Logging.ILogger<Main> logger, Dnp.S3.Manager.WinForms.Services.LogRepository logRepo)
         {
             s3 = s3Client;
@@ -110,9 +157,9 @@ namespace Dnp.S3.Manager.WinForms
                     }
                 }
             };
-             // single-selection of a folder should drill into it immediately on row enter
-             dgv_bucket_contents.RowEnter += async (s, e) =>
-             {
+            // single-selection of a folder should drill into it immediately on row enter
+            dgv_bucket_contents.RowEnter += async (s, e) =>
+            {
                 try
                 {
                     if (_suppressContentSelection) return;
@@ -149,7 +196,7 @@ namespace Dnp.S3.Manager.WinForms
             btn_rename.Click += async (s, e) => await OnRenameClicked();
             btn_delete.Click += async (s, e) => await OnDeleteClicked();
 
-            settingsToolStripMenuItem.Click += (s, e) => 
+            settingsToolStripMenuItem.Click += (s, e) =>
             {
                 var dlg = new SettingsForm(_settings);
                 if (dlg.ShowDialog() == DialogResult.OK)
@@ -230,8 +277,8 @@ namespace Dnp.S3.Manager.WinForms
                 };
                 // populate logs initially in case Logs tab is visible at startup
                 RefreshLogs();
-             }
-             catch { }
+            }
+            catch { }
         }
 
         /// <summary>
@@ -248,6 +295,8 @@ namespace Dnp.S3.Manager.WinForms
             {
                 _inEnsureGridFill = true;
                 if (dgv == null) return;
+                // avoid mutating Rows while DataGridView is in virtual mode
+                try { if (dgv.VirtualMode) return; } catch { }
                 // compute available height for rows (client height minus header)
                 var clientHeight = dgv.ClientSize.Height - dgv.ColumnHeadersHeight;
                 if (clientHeight <= 0) return;
@@ -324,6 +373,7 @@ namespace Dnp.S3.Manager.WinForms
             try
             {
                 var rows = _logRepo.GetLatest(500);
+                try { _logger?.LogInformation("Refreshing logs: {Count} entries", rows?.Count ?? 0); } catch { }
                 if (InvokeRequired)
                 {
                     BeginInvoke(new Action(() =>
@@ -337,7 +387,7 @@ namespace Dnp.S3.Manager.WinForms
                 }
                 AdjustGridRowHeights(dgv_logs);
             }
-            catch { }
+            catch (Exception ex) { try { _logger?.LogError(ex, "RefreshLogs failed"); } catch { } }
         }
 
         private Bitmap? TryGetResourceBitmap(string name)
@@ -404,40 +454,48 @@ namespace Dnp.S3.Manager.WinForms
             _suppressEnsureGridFill = true;
             try
             {
-                dgv_bucket_contents.Rows.Clear();
-                var fileBmp = TryGetResourceBitmap("file") ?? TryGetResourceBitmap("File");
-                var folderBmp = TryGetResourceBitmap("folder") ?? TryGetResourceBitmap("Folder");
+                try { _logger?.LogInformation("ListObjectsForPrefix: bucket={Bucket}, prefix={Prefix}, folders={Folders}, files={Files}", bucket, prefix, res?.Folders?.Count ?? 0, res?.Files?.Count ?? 0); } catch { }
 
-                // folders
+                // choose virtual or concrete rendering
+                if (DecideVirtualMode(res))
+                {
+                    try { _logger?.LogInformation("Using virtual provider for bucket={Bucket}, prefix={Prefix}", bucket, prefix); } catch { }
+                    try
+                    {
+                        _virtualProvider = new S3VirtualProvider(this, bucket, prefix ?? string.Empty, _pageSize);
+                    }
+                    catch
+                    {
+                        // fallback if provider initialization fails
+                        _virtualProvider = null;
+                    }
+
+                    if (_virtualProvider != null)
+                    {
+                        try { _virtualProvider.SetFromFullResult(res); } catch { }
+                        try { SetVirtualModeEnabled(true); } catch { }
+                        // ensure no selection
+                        try { dgv_bucket_contents.ClearSelection(); dgv_bucket_contents.CurrentCell = null; } catch { }
+                        _currentPath = prefix ?? string.Empty;
+                        UpdatePathLabel();
+                        return;
+                    }
+                }
+
+                // Build a uniform item list and delegate rendering to the centralized helper
+                var allItems = new List<(bool isFolder, string key, long? size, DateTime? modified, string display)>();
                 foreach (var p in res.Folders)
                 {
-                    var display = string.IsNullOrEmpty(prefix) ? p.TrimEnd('/') : (p.StartsWith(prefix) ? p.Substring(prefix.Length).TrimEnd('/') : p.TrimEnd('/'));
-                    Image icon = folderBmp ?? new Bitmap(1, 1);
-                    var fullKey = p; // prefix returned is full prefix
-                    // pass null for Modified for folders so column remains empty but typed as DateTime
-                    dgv_bucket_contents.Rows.Add(icon, fullKey, "1", display, "", null);
+                    var display = string.IsNullOrEmpty(prefix) ? p.TrimEnd('/') : (p.StartsWith(prefix ?? string.Empty) ? p.Substring((prefix ?? string.Empty).Length).TrimEnd('/') : p.TrimEnd('/'));
+                    allItems.Add((true, p, null, null, display));
                 }
-
-                // files
                 foreach (var f in res.Files)
                 {
-                    var display = string.IsNullOrEmpty(prefix) ? f.Key : (f.Key.StartsWith(prefix) ? f.Key.Substring(prefix.Length) : f.Key);
-                    Image icon = fileBmp ?? new Bitmap(1, 1);
-                    object? modifiedVal = f.LastModified.HasValue ? (object)f.LastModified.Value : null;
-                    dgv_bucket_contents.Rows.Add(icon, f.Key, "0", display, f.Size.HasValue ? FormatSize(f.Size.Value) : "", modifiedVal);
+                    var display = string.IsNullOrEmpty(prefix) ? f.Key : (f.Key.StartsWith(prefix ?? string.Empty) ? f.Key.Substring((prefix ?? string.Empty).Length) : f.Key);
+                    allItems.Add((false, f.Key, f.Size, f.LastModified, display));
                 }
 
-                // update current path and label
-                _currentPath = prefix ?? string.Empty;
-                UpdatePathLabel();
-                AdjustGridRowHeights(dgv_bucket_contents);
-                // leave rows unselected and clear current cell so RowEnter/Selection events are not fired
-                try
-                {
-                    dgv_bucket_contents.ClearSelection();
-                    dgv_bucket_contents.CurrentCell = null;
-                }
-                catch { }
+                PopulateBucketGridFromItems(allItems, prefix);
             }
             finally
             {
@@ -452,7 +510,7 @@ namespace Dnp.S3.Manager.WinForms
             if (_selectedBucket == null) return;
             if (rowIndex >= dgv_bucket_contents.Rows.Count) return;
             var row = dgv_bucket_contents.Rows[rowIndex];
-            var fullKey = row.Cells[ "KeyFull" ].Value?.ToString() ?? string.Empty;
+            var fullKey = row.Cells["KeyFull"].Value?.ToString() ?? string.Empty;
             var isFolder = (row.Cells["IsFolder"].Value?.ToString() ?? "0") == "1";
             if (isFolder)
             {
@@ -503,11 +561,14 @@ namespace Dnp.S3.Manager.WinForms
                         try
                         {
                             await Task.Delay(TimeSpan.FromSeconds(retention));
-                            if (InvokeRequired) { BeginInvoke(new Action(() =>
+                            if (InvokeRequired)
+                            {
+                                BeginInvoke(new Action(() =>
                             {
                                 var idx2 = _transfers.IndexOf(item);
                                 if (idx2 >= 0) _transfers.RemoveAt(idx2);
-                            })); }
+                            }));
+                            }
                             else
                             {
                                 var idx2 = _transfers.IndexOf(item);
@@ -643,7 +704,7 @@ namespace Dnp.S3.Manager.WinForms
                     item.Progress = 0;
                     item.State = "Queued";
                     _transfers.ResetItem(e.RowIndex);
-                    _= StartTransferAsync(item);
+                    _ = StartTransferAsync(item);
                 }
             }
         }
@@ -1121,7 +1182,7 @@ namespace Dnp.S3.Manager.WinForms
                 try
                 {
                     await s3.DeleteObjectsAsync(_selectedBucket ?? string.Empty, keysToDelete);
-                    _logger?.LogInformation("Deleted {Count} objects from {Bucket}", keysToDelete.Count, _selectedBucket);
+                    try { _logger?.LogInformation("Deleted {Count} objects from {Bucket}", keysToDelete.Count, _selectedBucket); } catch { }
                     await ListObjectsForPrefix(_selectedBucket, _currentPath);
                 }
                 catch (Exception ex)

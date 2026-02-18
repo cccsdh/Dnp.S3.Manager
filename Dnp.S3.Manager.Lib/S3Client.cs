@@ -133,7 +133,7 @@ namespace Dnp.S3.Manager.Lib
             }
         }
 
-        public async Task<ListObjectsV2Response> ListObjectsRawAsync(string bucket, string prefix = null, int maxKeys = 1000)
+        public async Task<ListObjectsV2Response> ListObjectsRawAsync(string bucket, string prefix = null, int maxKeys = 1000, string? continuationToken = null)
         {
             Log($"Listing objects raw for bucket={bucket}, prefix={prefix}", verboseOnly: true);
             var req = new ListObjectsV2Request
@@ -141,7 +141,8 @@ namespace Dnp.S3.Manager.Lib
                 BucketName = bucket,
                 Prefix = prefix ?? string.Empty,
                 Delimiter = "/",
-                MaxKeys = maxKeys
+                MaxKeys = maxKeys,
+                ContinuationToken = continuationToken
             };
             try
             {

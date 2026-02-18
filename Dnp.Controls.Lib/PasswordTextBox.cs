@@ -26,7 +26,7 @@ namespace Dnp.Controls.Lib
 
         private void InitializeComponent()
         {
-            _textBox = new TextBox { BorderStyle = BorderStyle.FixedSingle, Dock = DockStyle.Fill }; 
+            _textBox = new TextBox { BorderStyle = BorderStyle.FixedSingle, Dock = DockStyle.Fill };
             _toggle = new Button { Width = 30, Dock = DockStyle.Right, FlatStyle = FlatStyle.Flat };
             _toggle.FlatAppearance.BorderSize = 0;
             _toggle.Text = "\u25CF"; // simple dot as fallback
